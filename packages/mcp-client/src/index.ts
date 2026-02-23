@@ -66,6 +66,18 @@ async function main(): Promise<void> {
     }
   );
 
+  server.tool(
+    'agent_hub_whoami',
+    'Returns your own agent name and team ID.',
+    {},
+    async () => ({
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ agentName: AGENT_NAME, teamId: TEAM_ID }),
+      }],
+    })
+  );
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
 

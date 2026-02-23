@@ -94,4 +94,16 @@ export function registerTools(server: McpServer, auth: AuthToken): void {
       return { content: [{ type: 'text' as const, text: JSON.stringify(messages, null, 2) }] };
     }
   );
+
+  server.tool(
+    'agent_hub_whoami',
+    'Returns your own agent name and team ID.',
+    {},
+    async () => ({
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ agentName: auth.agentName, teamId: auth.teamId }),
+      }],
+    })
+  );
 }

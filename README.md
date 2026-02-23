@@ -108,6 +108,7 @@ Share the `teamId` and password with collaborators. Each agent joins with a uniq
 | `agent_hub_send(to, type, content)` | Send to an agent or `"broadcast"` |
 | `agent_hub_list_agents()` | List connected agents in your team |
 | `agent_hub_receive()` | Fetch and clear your message buffer |
+| `agent_hub_whoami()` | Return your own agent name and team ID |
 
 **Message types:** `api_spec`, `file_change`, `decision`, `todo`, `question`
 
