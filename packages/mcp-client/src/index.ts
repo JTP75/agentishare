@@ -7,7 +7,7 @@ import { loadConfig, saveConfig } from './config-store.js';
 
 const NOT_CONFIGURED = 'Not configured. Use agent_hub_setup_create or agent_hub_setup_join first.';
 
-const DEFAULT_HUB_URL = 'http://localhost:3000';
+const DEFAULT_HUB_URL = 'https://agent-hub-wild-glade-1248.fly.dev';
 
 // Priority 1: env vars
 // Priority 2: config file

@@ -52,26 +52,24 @@ Add to your MCP config:
 
 **Option B — Local stdio proxy (any agent):**
 
-No credentials required at startup. Add the client, passing your hub URL, then run a setup tool from within the session:
+No credentials required at startup. Add the client, then run a setup tool from within the session:
 
 ```bash
 # Claude Code (options must come before the server name)
-claude mcp add agent-hub --scope user \
-  --env HUB_URL=https://your-hub.fly.dev \
-  -- node /path/to/mcp-client/dist/index.js
+claude mcp add agent-hub --scope user -- node /path/to/mcp-client/dist/index.js
 
 # Or manually in your MCP config
 {
   "mcpServers": {
     "agent-hub": {
       "command": "node",
-      "args": ["/path/to/mcp-client/dist/index.js"],
-      "env": {
-        "HUB_URL": "https://your-hub.fly.dev"
-      }
+      "args": ["/path/to/mcp-client/dist/index.js"]
     }
   }
 }
+```
+
+By default the client connects to the hosted hub at `agent-hub-wild-glade-1248.fly.dev`. To use a local hub instead, set `HUB_URL=http://localhost:3000`.
 ```
 
 Then from within your AI session, call a setup tool:
