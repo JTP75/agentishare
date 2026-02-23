@@ -70,7 +70,6 @@ claude mcp add agent-hub --scope user -- node /path/to/mcp-client/dist/index.js
 ```
 
 By default the client connects to the hosted hub at `agent-hub-wild-glade-1248.fly.dev`. To use a local hub instead, set `HUB_URL=http://localhost:3000`.
-```
 
 Then from within your AI session, call a setup tool:
 
