@@ -11,13 +11,35 @@ export interface HubClientOptions {
 export class HubClient {
   private es?: EventSource;
   private messageBuffer: AgentMessage[] = [];
-  private readonly opts: HubClientOptions;
+  private opts: HubClientOptions;
 
   constructor(opts: HubClientOptions) {
     this.opts = opts;
   }
 
+  isConfigured(): boolean {
+    return !!(this.opts.apiKey && this.opts.agentName);
+  }
+
+  configure(opts: HubClientOptions): void {
+    this.opts = opts;
+  }
+
+  identity(): { agentName: string; hubUrl: string } {
+    return { agentName: this.opts.agentName, hubUrl: this.opts.hubUrl };
+  }
+
+  async createTeam(hubUrl: string): Promise<{ teamId: string; apiKey: string }> {
+    const res = await fetch(`${hubUrl}/teams/create`, { method: 'POST' });
+    if (!res.ok) {
+      const body = await res.json() as { error: string };
+      throw new Error(`Create team failed: ${body.error}`);
+    }
+    return res.json() as Promise<{ teamId: string; apiKey: string }>;
+  }
+
   connectSSE(): void {
+    this.es?.close();
     const { hubUrl, apiKey, agentName } = this.opts;
     const url = `${hubUrl}/agent/stream?api_key=${encodeURIComponent(apiKey)}&agent_name=${encodeURIComponent(agentName)}`;
     this.es = new EventSource(url);

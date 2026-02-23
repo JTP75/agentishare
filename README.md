@@ -51,21 +51,22 @@ Add to your MCP config:
 ```
 
 **Option B — Local stdio proxy (any agent):**
-```bash
-TEAM_API_KEY=<key> AGENT_NAME=alice HUB_URL=https://your-hub.fly.dev \
-  npx @agent-hub/mcp-client
-```
 
-Add to your MCP config:
-```json
+No credentials required at startup. Add the client, passing your hub URL, then run a setup tool from within the session:
+
+```bash
+# Claude Code (options must come before the server name)
+claude mcp add agent-hub --scope user \
+  --env HUB_URL=https://your-hub.fly.dev \
+  -- node /path/to/mcp-client/dist/index.js
+
+# Or manually in your MCP config
 {
   "mcpServers": {
     "agent-hub": {
-      "command": "npx",
-      "args": ["@agent-hub/mcp-client"],
+      "command": "node",
+      "args": ["/path/to/mcp-client/dist/index.js"],
       "env": {
-        "TEAM_API_KEY": "<key>",
-        "AGENT_NAME": "alice",
         "HUB_URL": "https://your-hub.fly.dev"
       }
     }
@@ -73,26 +74,29 @@ Add to your MCP config:
 }
 ```
 
+Then from within your AI session, call a setup tool:
+
+- **Create a new team:** `agent_hub_setup_create("alice")` — returns a `teamId` and `apiKey` to share with collaborators
+- **Join an existing team:** `agent_hub_setup_join("YOUR_API_KEY", "alice")`
+
+Credentials are saved to `~/.config/agent-hub/config.json` and loaded automatically on future sessions — no re-setup needed.
+
+Env vars (`TEAM_API_KEY`, `AGENT_NAME`, `HUB_URL`) are still supported for scripted / CI use and take priority over the config file.
+
 ---
 
 ## Usage
-
-### Create a team
-```bash
-curl -X POST https://your-hub.fly.dev/teams/create
-# → { "teamId": "550e8400-...", "apiKey": "a3f9..." }
-```
-
-Share the `apiKey` with collaborators. Each agent connects with a unique `agentName` — no separate join step needed.
 
 ### MCP tools (available to your AI agent)
 
 | Tool | Description |
 |------|-------------|
+| `agent_hub_setup_create(agentName)` | Create a new team and connect; saves credentials locally |
+| `agent_hub_setup_join(apiKey, agentName)` | Join an existing team and connect; saves credentials locally |
 | `agent_hub_send(to, type, content)` | Send to an agent or `"broadcast"` |
 | `agent_hub_list_agents()` | List connected agents in your team |
 | `agent_hub_receive()` | Fetch and clear your message buffer |
-| `agent_hub_whoami()` | Return your own agent name and team ID |
+| `agent_hub_whoami()` | Return your own agent name and hub URL |
 
 **Message types:** `api_spec`, `file_change`, `decision`, `todo`, `question`
 
@@ -117,7 +121,7 @@ All values live in `config/*.props` — nothing is hardcoded. Edit these to chan
 ## Implementation
 
 - **`packages/hub-server`** — Express + [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk). Each SSE connection spawns its own `McpServer` instance so tools are scoped to the authenticated agent. In-memory state (teams → agents → message buffers).
-- **`packages/mcp-client`** — Stdio MCP server. Connects on startup using `TEAM_API_KEY` + `AGENT_NAME`, maintains an SSE connection to the hub, buffers incoming messages for `agent_hub_receive`.
+- **`packages/mcp-client`** — Stdio MCP server. Starts in bootstrap mode if no credentials are found; exposes `agent_hub_setup_create` / `agent_hub_setup_join` tools that configure the client mid-session and persist credentials to `~/.config/agent-hub/config.json`. Credentials are loaded on startup (env vars → config file → bootstrap mode).
 - **Auth** — API keys (64-char hex, SHA-256 hashed at rest). `POST /teams/create` returns a key; agents pass it as `?api_key=` or `Authorization: Bearer`. No join step, no token expiry, revocation by key deletion.
 - **Tests** — 27 unit tests (`npm test`). Key coverage: ConfigLoader merge/override/`${VAR}` resolution, API key generation and hashing, Zod schema validation, message delivery and buffer capping.
 
