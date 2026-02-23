@@ -40,7 +40,7 @@ export class HubClient {
   }
 
   connectSSE(): void {
-    const url = `${this.opts.hubUrl}/sse?token=${encodeURIComponent(this.token)}`;
+    const url = `${this.opts.hubUrl}/agent/stream?token=${encodeURIComponent(this.token)}`;
     this.es = new EventSource(url);
 
     this.es.onmessage = (event) => {

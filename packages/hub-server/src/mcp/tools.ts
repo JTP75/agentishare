@@ -42,6 +42,7 @@ export function registerTools(server: McpServer, auth: AuthToken): void {
         if (target.messageBuffer.length > MAX_BUFFER) {
           target.messageBuffer.shift();
         }
+        target.push?.(message);
       }
 
       return {

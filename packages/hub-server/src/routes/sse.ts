@@ -13,7 +13,7 @@ export const sseRouter = Router();
 
 // Auth token can be passed as ?token=... (for EventSource clients that can't set headers)
 // or as Authorization: Bearer <token>
-sseRouter.get('/', requireAuth, async (req, res) => {
+sseRouter.get('/', requireAuth, async (req, res, next) => {
   const auth = res.locals['auth'] as AuthToken;
   const team = state.teams.get(auth.teamId);
 
@@ -30,23 +30,28 @@ sseRouter.get('/', requireAuth, async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no'); // Disable Nginx response buffering
+  res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders();
 
   const keepAlive = setInterval(() => res.write(': keep-alive\n\n'), keepAliveMs);
 
-  const transport = await createAgentMcpServer(auth, res);
+  try {
+    const transport = await createAgentMcpServer(auth, res);
 
-  team.agents.set(auth.agentName, {
-    name: auth.agentName,
-    teamId: auth.teamId,
-    sessionId: transport.sessionId,
-    connectedAt: Date.now(),
-    messageBuffer: [],
-  });
+    team.agents.set(auth.agentName, {
+      name: auth.agentName,
+      teamId: auth.teamId,
+      sessionId: transport.sessionId,
+      connectedAt: Date.now(),
+      messageBuffer: [],
+    });
 
-  res.on('close', () => {
+    res.on('close', () => {
+      clearInterval(keepAlive);
+      team.agents.delete(auth.agentName);
+    });
+  } catch (err) {
     clearInterval(keepAlive);
-    team.agents.delete(auth.agentName);
-  });
+    next(err);
+  }
 });

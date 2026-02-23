@@ -35,7 +35,8 @@ NODE_ENV=development npm run dev
 cd packages/hub-server
 fly launch --no-deploy
 fly secrets set TOKEN_SECRET=$(openssl rand -hex 32)
-fly deploy
+cd ../..
+fly deploy --config packages/hub-server/fly.toml
 ```
 
 ### 2. Connect your agent

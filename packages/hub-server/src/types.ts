@@ -15,6 +15,8 @@ export interface Agent {
   sessionId: string;
   connectedAt: number;
   messageBuffer: AgentMessage[];
+  // Real-time push for stdio proxy agents connected via GET /agent/stream
+  push?: (msg: AgentMessage) => void;
 }
 
 export interface Team {
