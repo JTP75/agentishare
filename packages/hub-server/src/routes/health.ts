@@ -1,14 +1,17 @@
 import { Router } from 'express';
-import { state } from '../state.js';
+import { store } from '../store/index.js';
 
 export const healthRouter = Router();
 
-healthRouter.get('/', (_req, res) => {
-  const agentCount = [...state.teams.values()].reduce((n, t) => n + t.agents.size, 0);
+healthRouter.get('/', async (_req, res) => {
+  const teams = await store.listTeams();
+  const agentCounts = await Promise.all(teams.map((t) => store.listAgents(t.id)));
+  const agentCount = agentCounts.reduce((n, agents) => n + agents.length, 0);
+
   res.json({
     status: 'ok',
     uptime: process.uptime(),
-    teams: state.teams.size,
+    teams: teams.length,
     agents: agentCount,
   });
 });

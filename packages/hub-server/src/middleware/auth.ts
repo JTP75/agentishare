@@ -1,8 +1,8 @@
 import type { Request, Response, NextFunction } from 'express';
 import { hashApiKey } from '../auth.js';
-import { state } from '../state.js';
+import { store } from '../store/index.js';
 
-export function requireAuth(req: Request, res: Response, next: NextFunction): void {
+export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   const header = req.headers.authorization;
   const key = header?.startsWith('Bearer ')
     ? header.slice(7)
@@ -16,14 +16,17 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     return;
   }
 
-  const keyHash = hashApiKey(key);
-  const team = [...state.teams.values()].find((t) => t.apiKeyHash === keyHash);
+  try {
+    const team = await store.findTeamByApiKeyHash(hashApiKey(key));
 
-  if (!team) {
-    res.status(401).json({ error: 'Invalid API key' });
-    return;
+    if (!team) {
+      res.status(401).json({ error: 'Invalid API key' });
+      return;
+    }
+
+    res.locals['auth'] = { teamId: team.id, agentName };
+    next();
+  } catch (err) {
+    next(err);
   }
-
-  res.locals['auth'] = { teamId: team.id, agentName };
-  next();
 }

@@ -1,8 +1,8 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
-import { state } from '../state.js';
-import type { Agent, AgentMessage, AuthToken } from '../types.js';
+import { store, connections } from '../store/index.js';
+import type { AgentMessage, AuthToken } from '../types.js';
 import { ConfigLoader, Sections, Keys } from '../config/index.js';
 
 const config = new ConfigLoader(process.env.NODE_ENV === 'production' ? 'prod' : process.env.NODE_ENV === 'development' ? 'dev' : undefined);
@@ -18,7 +18,7 @@ export function registerTools(server: McpServer, auth: AuthToken): void {
       content: z.string().describe('Message content (plain text or JSON string)'),
     },
     async ({ to, type, content }) => {
-      const team = state.teams.get(auth.teamId);
+      const team = await store.getTeam(auth.teamId);
       if (!team) {
         return { content: [{ type: 'text' as const, text: 'Team not found' }], isError: true };
       }
@@ -32,17 +32,14 @@ export function registerTools(server: McpServer, auth: AuthToken): void {
         timestamp: Date.now(),
       };
 
-      const targets: Agent[] =
+      const targets =
         to === 'broadcast'
-          ? [...team.agents.values()].filter((a) => a.name !== auth.agentName)
-          : ([team.agents.get(to)].filter(Boolean) as Agent[]);
+          ? (await store.listAgents(auth.teamId)).filter((a) => a.name !== auth.agentName)
+          : [await store.getAgent(auth.teamId, to)].filter(Boolean) as Awaited<ReturnType<typeof store.getAgent>>[];
 
       for (const target of targets) {
-        target.messageBuffer.push(message);
-        if (target.messageBuffer.length > MAX_BUFFER) {
-          target.messageBuffer.shift();
-        }
-        target.push?.(message);
+        await store.pushMessage(auth.teamId, target!.name, message, MAX_BUFFER);
+        connections.get(`${auth.teamId}:${target!.name}`)?.(message);
       }
 
       return {
@@ -61,12 +58,7 @@ export function registerTools(server: McpServer, auth: AuthToken): void {
     'List all agents currently connected in your team',
     {},
     async () => {
-      const team = state.teams.get(auth.teamId);
-      if (!team) {
-        return { content: [{ type: 'text' as const, text: '[]' }] };
-      }
-
-      const agents = [...team.agents.values()].map((a) => ({
+      const agents = (await store.listAgents(auth.teamId)).map((a) => ({
         name: a.name,
         connectedAt: a.connectedAt,
         pendingMessages: a.messageBuffer.length,
@@ -81,16 +73,7 @@ export function registerTools(server: McpServer, auth: AuthToken): void {
     'Retrieve and clear all buffered messages addressed to you',
     {},
     async () => {
-      const team = state.teams.get(auth.teamId);
-      const agent = team?.agents.get(auth.agentName);
-
-      if (!agent) {
-        return { content: [{ type: 'text' as const, text: '[]' }] };
-      }
-
-      const messages = [...agent.messageBuffer];
-      agent.messageBuffer.length = 0;
-
+      const messages = await store.flushMessages(auth.teamId, auth.agentName);
       return { content: [{ type: 'text' as const, text: JSON.stringify(messages, null, 2) }] };
     }
   );

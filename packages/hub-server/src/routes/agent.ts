@@ -2,8 +2,8 @@ import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { requireAuth } from '../middleware/auth.js';
 import { validate, sendMessageSchema } from '../middleware/validation.js';
-import { state } from '../state.js';
-import type { Agent, AgentMessage, AuthToken } from '../types.js';
+import { store, connections } from '../store/index.js';
+import type { AgentMessage, AuthToken } from '../types.js';
 import { ConfigLoader, Sections, Keys } from '../config/index.js';
 
 const config = new ConfigLoader(process.env.NODE_ENV === 'production' ? 'prod' : process.env.NODE_ENV === 'development' ? 'dev' : undefined);
@@ -13,11 +13,11 @@ const keepAliveMs = config.get<number>(Sections.SSE, Keys.KEEP_ALIVE_INTERVAL_MS
 export const agentRouter = Router();
 
 // POST /agent/send — used by mcp-client to deliver messages via REST
-agentRouter.post('/send', requireAuth, validate(sendMessageSchema), (req, res) => {
+agentRouter.post('/send', requireAuth, validate(sendMessageSchema), async (req, res) => {
   const auth = res.locals['auth'] as AuthToken;
   const { to, type, content } = req.body as { to: string; type: AgentMessage['type']; content: string };
 
-  const team = state.teams.get(auth.teamId);
+  const team = await store.getTeam(auth.teamId);
   if (!team) {
     res.status(404).json({ error: 'Team not found' });
     return;
@@ -32,28 +32,24 @@ agentRouter.post('/send', requireAuth, validate(sendMessageSchema), (req, res) =
     timestamp: Date.now(),
   };
 
-  const targets: Agent[] =
+  const targets =
     to === 'broadcast'
-      ? [...team.agents.values()].filter((a) => a.name !== auth.agentName)
-      : ([team.agents.get(to)].filter(Boolean) as Agent[]);
+      ? (await store.listAgents(auth.teamId)).filter((a) => a.name !== auth.agentName)
+      : [await store.getAgent(auth.teamId, to)].filter(Boolean) as Awaited<ReturnType<typeof store.getAgent>>[];
 
   for (const target of targets) {
-    target.messageBuffer.push(message);
-    if (target.messageBuffer.length > MAX_BUFFER) {
-      target.messageBuffer.shift();
-    }
-    target.push?.(message);
+    await store.pushMessage(auth.teamId, target!.name, message, MAX_BUFFER);
+    connections.get(`${auth.teamId}:${target!.name}`)?.(message);
   }
 
   res.json({ ok: true, messageId: message.id, deliveredTo: targets.length });
 });
 
 // GET /agent/stream — plain SSE stream for stdio proxy agents (mcp-client)
-// Registers the agent in team state and pushes AgentMessages in real-time.
-agentRouter.get('/stream', requireAuth, (req, res) => {
+agentRouter.get('/stream', requireAuth, async (req, res) => {
   const auth = res.locals['auth'] as AuthToken;
-  const team = state.teams.get(auth.teamId);
 
+  const team = await store.getTeam(auth.teamId);
   if (!team) {
     res.status(404).json({ error: 'Team not found' });
     return;
@@ -67,36 +63,37 @@ agentRouter.get('/stream', requireAuth, (req, res) => {
 
   const keepAlive = setInterval(() => res.write(': keep-alive\n\n'), keepAliveMs);
 
-  // Register (or re-register on reconnect) the agent in team state
-  team.agents.set(auth.agentName, {
+  // Preserve buffered messages across reconnects
+  const existing = await store.getAgent(auth.teamId, auth.agentName);
+  await store.saveAgent({
     name: auth.agentName,
     teamId: auth.teamId,
     sessionId: uuidv4(),
     connectedAt: Date.now(),
-    messageBuffer: team.agents.get(auth.agentName)?.messageBuffer ?? [],
-    push: (msg: AgentMessage) => res.write(`data: ${JSON.stringify(msg)}\n\n`),
+    messageBuffer: existing?.messageBuffer ?? [],
   });
 
-  res.on('close', () => {
+  const pushFn = (msg: AgentMessage) => res.write(`data: ${JSON.stringify(msg)}\n\n`);
+  connections.set(`${auth.teamId}:${auth.agentName}`, pushFn);
+
+  res.on('close', async () => {
     clearInterval(keepAlive);
-    // Clear push fn but keep agent in state briefly so in-flight messages aren't lost
-    const agent = team.agents.get(auth.agentName);
-    if (agent) agent.push = undefined;
-    team.agents.delete(auth.agentName);
+    connections.delete(`${auth.teamId}:${auth.agentName}`);
+    await store.removeAgent(auth.teamId, auth.agentName);
   });
 });
 
 // GET /agent/list — used by mcp-client to list connected agents
-agentRouter.get('/list', requireAuth, (req, res) => {
+agentRouter.get('/list', requireAuth, async (req, res) => {
   const auth = res.locals['auth'] as AuthToken;
-  const team = state.teams.get(auth.teamId);
 
+  const team = await store.getTeam(auth.teamId);
   if (!team) {
     res.status(404).json({ error: 'Team not found' });
     return;
   }
 
-  const agents = [...team.agents.values()].map((a) => ({
+  const agents = (await store.listAgents(auth.teamId)).map((a) => ({
     name: a.name,
     connectedAt: a.connectedAt,
     pendingMessages: a.messageBuffer.length,

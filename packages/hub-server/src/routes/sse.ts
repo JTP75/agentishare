@@ -1,7 +1,8 @@
 import { Router } from 'express';
+import { v4 as uuidv4 } from 'uuid';
 import { requireAuth } from '../middleware/auth.js';
 import { createAgentMcpServer } from '../mcp/server.js';
-import { state } from '../state.js';
+import { store } from '../store/index.js';
 import type { AuthToken } from '../types.js';
 import { ConfigLoader, Sections, Keys } from '../config/index.js';
 
@@ -11,18 +12,17 @@ const maxAgents = config.get<number>(Sections.TEAM, Keys.MAX_AGENTS_PER_TEAM, 20
 
 export const sseRouter = Router();
 
-// Auth token can be passed as ?token=... (for EventSource clients that can't set headers)
-// or as Authorization: Bearer <token>
 sseRouter.get('/', requireAuth, async (req, res, next) => {
   const auth = res.locals['auth'] as AuthToken;
-  const team = state.teams.get(auth.teamId);
 
+  const team = await store.getTeam(auth.teamId);
   if (!team) {
     res.status(404).json({ error: 'Team not found' });
     return;
   }
 
-  if (team.agents.size >= maxAgents) {
+  const agentCount = (await store.listAgents(auth.teamId)).length;
+  if (agentCount >= maxAgents) {
     res.status(429).json({ error: 'Team agent limit reached' });
     return;
   }
@@ -38,7 +38,7 @@ sseRouter.get('/', requireAuth, async (req, res, next) => {
   try {
     const transport = await createAgentMcpServer(auth, res);
 
-    team.agents.set(auth.agentName, {
+    await store.saveAgent({
       name: auth.agentName,
       teamId: auth.teamId,
       sessionId: transport.sessionId,
@@ -46,9 +46,9 @@ sseRouter.get('/', requireAuth, async (req, res, next) => {
       messageBuffer: [],
     });
 
-    res.on('close', () => {
+    res.on('close', async () => {
       clearInterval(keepAlive);
-      team.agents.delete(auth.agentName);
+      await store.removeAgent(auth.teamId, auth.agentName);
     });
   } catch (err) {
     clearInterval(keepAlive);
