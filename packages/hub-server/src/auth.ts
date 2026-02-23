@@ -1,21 +1,9 @@
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import type { AuthToken } from './types.js';
+import { createHash, randomBytes } from 'crypto';
 
-const SALT_ROUNDS = 10;
-
-export async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, SALT_ROUNDS);
+export function generateApiKey(): string {
+  return randomBytes(32).toString('hex');
 }
 
-export async function verifyPassword(password: string, hash: string): Promise<boolean> {
-  return bcrypt.compare(password, hash);
-}
-
-export function signToken(payload: AuthToken, secret: string, expirySeconds: number): string {
-  return jwt.sign(payload, secret, { expiresIn: expirySeconds });
-}
-
-export function verifyToken(token: string, secret: string): AuthToken {
-  return jwt.verify(token, secret) as AuthToken;
+export function hashApiKey(key: string): string {
+  return createHash('sha256').update(key).digest('hex');
 }

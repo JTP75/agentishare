@@ -21,7 +21,7 @@ export interface Agent {
 
 export interface Team {
   id: string;
-  passwordHash: string;
+  apiKeyHash: string;
   createdAt: number;
   agents: Map<string, Agent>;
 }

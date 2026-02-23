@@ -1,18 +1,6 @@
 import { z } from 'zod';
 import type { Request, Response, NextFunction } from 'express';
 
-export const createTeamSchema = z.object({
-  password: z.string().min(8).max(128),
-});
-
-export const joinTeamSchema = z.object({
-  teamId: z.string().uuid(),
-  agentName: z.string().min(1).max(64).regex(/^[a-zA-Z0-9_-]+$/, {
-    message: 'Agent name may only contain letters, numbers, hyphens, and underscores',
-  }),
-  password: z.string().min(8).max(128),
-});
-
 export const sendMessageSchema = z.object({
   to: z.string().min(1),
   type: z.enum(['api_spec', 'file_change', 'decision', 'todo', 'question']),

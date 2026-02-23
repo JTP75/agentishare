@@ -5,13 +5,12 @@ import { z } from 'zod';
 import { HubClient } from './hub-client.js';
 
 const HUB_URL = process.env['HUB_URL'] ?? 'http://localhost:3000';
-const TEAM_ID = process.env['TEAM_ID'] ?? '';
-const TEAM_PASSWORD = process.env['TEAM_PASSWORD'] ?? '';
+const TEAM_API_KEY = process.env['TEAM_API_KEY'] ?? '';
 const AGENT_NAME = process.env['AGENT_NAME'] ?? '';
 
-if (!TEAM_ID || !TEAM_PASSWORD || !AGENT_NAME) {
+if (!TEAM_API_KEY || !AGENT_NAME) {
   process.stderr.write(
-    'Error: Required environment variables: TEAM_ID, TEAM_PASSWORD, AGENT_NAME\n' +
+    'Error: Required environment variables: TEAM_API_KEY, AGENT_NAME\n' +
     'Optional: HUB_URL (default: http://localhost:3000)\n'
   );
   process.exit(1);
@@ -19,16 +18,14 @@ if (!TEAM_ID || !TEAM_PASSWORD || !AGENT_NAME) {
 
 const hub = new HubClient({
   hubUrl: HUB_URL,
-  teamId: TEAM_ID,
-  password: TEAM_PASSWORD,
+  apiKey: TEAM_API_KEY,
   agentName: AGENT_NAME,
 });
 
 async function main(): Promise<void> {
-  await hub.join();
   hub.connectSSE();
 
-  process.stderr.write(`[agent-hub] Connected as "${AGENT_NAME}" on team ${TEAM_ID}\n`);
+  process.stderr.write(`[agent-hub] Connected as "${AGENT_NAME}"\n`);
 
   const server = new McpServer({ name: 'agent-hub-client', version: '0.1.0' });
 
@@ -73,7 +70,7 @@ async function main(): Promise<void> {
     async () => ({
       content: [{
         type: 'text' as const,
-        text: JSON.stringify({ agentName: AGENT_NAME, teamId: TEAM_ID }),
+        text: JSON.stringify({ agentName: AGENT_NAME }),
       }],
     })
   );

@@ -9,7 +9,7 @@ function makeAgent(name: string, teamId: string): Agent {
 function makeTeam(id: string, agents: Agent[]): Team {
   const map = new Map<string, Agent>();
   for (const a of agents) map.set(a.name, a);
-  return { id, passwordHash: 'hash', createdAt: Date.now(), agents: map };
+  return { id, apiKeyHash: 'hash', createdAt: Date.now(), agents: map };
 }
 
 // Isolated delivery logic — mirrors what tools.ts does, extracted for pure unit testing

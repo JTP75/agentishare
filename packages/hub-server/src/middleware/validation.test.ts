@@ -1,47 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createTeamSchema, joinTeamSchema, sendMessageSchema } from './validation.js';
-
-describe('createTeamSchema', () => {
-  it('accepts a valid password', () => {
-    expect(createTeamSchema.safeParse({ password: 'validpass1' }).success).toBe(true);
-  });
-
-  it('rejects password shorter than 8 characters', () => {
-    expect(createTeamSchema.safeParse({ password: 'short' }).success).toBe(false);
-  });
-
-  it('rejects missing password', () => {
-    expect(createTeamSchema.safeParse({}).success).toBe(false);
-  });
-});
-
-describe('joinTeamSchema', () => {
-  const valid = {
-    teamId: '550e8400-e29b-41d4-a716-446655440000',
-    agentName: 'alice-backend',
-    password: 'securepassword',
-  };
-
-  it('accepts valid input', () => {
-    expect(joinTeamSchema.safeParse(valid).success).toBe(true);
-  });
-
-  it('rejects non-UUID teamId', () => {
-    expect(joinTeamSchema.safeParse({ ...valid, teamId: 'not-a-uuid' }).success).toBe(false);
-  });
-
-  it('rejects agent name with special characters', () => {
-    expect(joinTeamSchema.safeParse({ ...valid, agentName: 'alice backend' }).success).toBe(false);
-  });
-
-  it('accepts agent name with hyphens and underscores', () => {
-    expect(joinTeamSchema.safeParse({ ...valid, agentName: 'alice_backend-01' }).success).toBe(true);
-  });
-
-  it('rejects empty agent name', () => {
-    expect(joinTeamSchema.safeParse({ ...valid, agentName: '' }).success).toBe(false);
-  });
-});
+import { sendMessageSchema } from './validation.js';
 
 describe('sendMessageSchema', () => {
   const valid = {

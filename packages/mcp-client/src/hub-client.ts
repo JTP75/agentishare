@@ -4,13 +4,11 @@ import type { AgentMessage, AgentInfo } from './types.js';
 
 export interface HubClientOptions {
   hubUrl: string;
-  teamId: string;
-  password: string;
+  apiKey: string;
   agentName: string;
 }
 
 export class HubClient {
-  private token = '';
   private es?: EventSource;
   private messageBuffer: AgentMessage[] = [];
   private readonly opts: HubClientOptions;
@@ -19,28 +17,9 @@ export class HubClient {
     this.opts = opts;
   }
 
-  async join(): Promise<void> {
-    const res = await fetch(`${this.opts.hubUrl}/teams/join`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        teamId: this.opts.teamId,
-        agentName: this.opts.agentName,
-        password: this.opts.password,
-      }),
-    });
-
-    if (!res.ok) {
-      const body = await res.json() as { error: string };
-      throw new Error(`Failed to join team: ${body.error}`);
-    }
-
-    const data = await res.json() as { token: string };
-    this.token = data.token;
-  }
-
   connectSSE(): void {
-    const url = `${this.opts.hubUrl}/agent/stream?token=${encodeURIComponent(this.token)}`;
+    const { hubUrl, apiKey, agentName } = this.opts;
+    const url = `${hubUrl}/agent/stream?api_key=${encodeURIComponent(apiKey)}&agent_name=${encodeURIComponent(agentName)}`;
     this.es = new EventSource(url);
 
     this.es.onmessage = (event) => {
@@ -58,11 +37,13 @@ export class HubClient {
   }
 
   async send(to: string, type: string, content: string): Promise<{ ok: boolean; messageId: string; deliveredTo: number }> {
-    const res = await fetch(`${this.opts.hubUrl}/agent/send`, {
+    const { hubUrl, apiKey, agentName } = this.opts;
+    const res = await fetch(`${hubUrl}/agent/send`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.token}`,
+        Authorization: `Bearer ${apiKey}`,
+        'X-Agent-Name': agentName,
       },
       body: JSON.stringify({ to, type, content }),
     });
@@ -76,8 +57,12 @@ export class HubClient {
   }
 
   async listAgents(): Promise<AgentInfo[]> {
-    const res = await fetch(`${this.opts.hubUrl}/agent/list`, {
-      headers: { Authorization: `Bearer ${this.token}` },
+    const { hubUrl, apiKey, agentName } = this.opts;
+    const res = await fetch(`${hubUrl}/agent/list`, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'X-Agent-Name': agentName,
+      },
     });
 
     if (!res.ok) {

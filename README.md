@@ -16,7 +16,7 @@ Cursor      ──[stdio]── mcp-client ──[HTTP+SSE]──┘
 
 The **hub server** is a central Express server that also speaks MCP over SSE — Claude Code can connect to it directly as a remote MCP server. The **mcp-client** package is a local stdio proxy for agents that don't support remote MCP.
 
-Agents are organized into **teams** (shared password). Messages are team-scoped; no cross-team visibility.
+Agents are organized into **teams** (shared API key). Messages are team-scoped; no cross-team visibility.
 
 ---
 
@@ -32,10 +32,6 @@ NODE_ENV=development npm run dev
 
 **Deploy to Fly.io:**
 ```bash
-cd packages/hub-server
-fly launch --no-deploy
-fly secrets set TOKEN_SECRET=$(openssl rand -hex 32)
-cd ../..
 fly deploy --config packages/hub-server/fly.toml
 ```
 
@@ -48,7 +44,7 @@ Add to your MCP config:
 {
   "mcpServers": {
     "agent-hub": {
-      "url": "https://your-hub.fly.dev/sse?token=YOUR_TOKEN"
+      "url": "https://your-hub.fly.dev/sse?api_key=YOUR_API_KEY&agent_name=alice"
     }
   }
 }
@@ -56,8 +52,7 @@ Add to your MCP config:
 
 **Option B — Local stdio proxy (any agent):**
 ```bash
-# Get a token first (see Usage below), then:
-TEAM_ID=<id> TEAM_PASSWORD=<pass> AGENT_NAME=alice HUB_URL=https://your-hub.fly.dev \
+TEAM_API_KEY=<key> AGENT_NAME=alice HUB_URL=https://your-hub.fly.dev \
   npx @agent-hub/mcp-client
 ```
 
@@ -69,8 +64,7 @@ Add to your MCP config:
       "command": "npx",
       "args": ["@agent-hub/mcp-client"],
       "env": {
-        "TEAM_ID": "<id>",
-        "TEAM_PASSWORD": "<pass>",
+        "TEAM_API_KEY": "<key>",
         "AGENT_NAME": "alice",
         "HUB_URL": "https://your-hub.fly.dev"
       }
@@ -85,21 +79,11 @@ Add to your MCP config:
 
 ### Create a team
 ```bash
-curl -X POST https://your-hub.fly.dev/teams/create \
-  -H 'Content-Type: application/json' \
-  -d '{"password": "yourpassword"}'
-# → { "teamId": "550e8400-..." }
+curl -X POST https://your-hub.fly.dev/teams/create
+# → { "teamId": "550e8400-...", "apiKey": "a3f9..." }
 ```
 
-### Join a team (get a token)
-```bash
-curl -X POST https://your-hub.fly.dev/teams/join \
-  -H 'Content-Type: application/json' \
-  -d '{"teamId": "550e8400-...", "agentName": "alice", "password": "yourpassword"}'
-# → { "token": "eyJ..." }
-```
-
-Share the `teamId` and password with collaborators. Each agent joins with a unique `agentName`.
+Share the `apiKey` with collaborators. Each agent connects with a unique `agentName` — no separate join step needed.
 
 ### MCP tools (available to your AI agent)
 
@@ -124,21 +108,18 @@ All values live in `config/*.props` — nothing is hardcoded. Edit these to chan
 | Section | Key | Default | Description |
 |---------|-----|---------|-------------|
 | `server` | `port` | `3000` | Hub listen port |
-| `auth` | `token_expiry_seconds` | `86400` | JWT lifetime |
 | `rate_limit` | `max_requests` | `100` | Requests per minute |
 | `sse` | `max_message_buffer_size` | `100` | Max buffered messages per agent |
 | `team` | `max_agents_per_team` | `20` | Max concurrent agents |
-
-Production secrets go in environment variables — `config/config.prod.props` references them as `${TOKEN_SECRET}`.
 
 ---
 
 ## Implementation
 
 - **`packages/hub-server`** — Express + [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk). Each SSE connection spawns its own `McpServer` instance so tools are scoped to the authenticated agent. In-memory state (teams → agents → message buffers).
-- **`packages/mcp-client`** — Stdio MCP server. Joins team on startup, maintains an SSE connection to the hub, buffers incoming messages for `agent_hub_receive`.
-- **Auth** — bcrypt team passwords, JWT tokens for SSE connections.
-- **Tests** — 35 unit tests (`npm test`). Key coverage: ConfigLoader merge/override/`${VAR}` resolution, auth round-trips, Zod schema validation, message delivery and buffer capping.
+- **`packages/mcp-client`** — Stdio MCP server. Connects on startup using `TEAM_API_KEY` + `AGENT_NAME`, maintains an SSE connection to the hub, buffers incoming messages for `agent_hub_receive`.
+- **Auth** — API keys (64-char hex, SHA-256 hashed at rest). `POST /teams/create` returns a key; agents pass it as `?api_key=` or `Authorization: Bearer`. No join step, no token expiry, revocation by key deletion.
+- **Tests** — 27 unit tests (`npm test`). Key coverage: ConfigLoader merge/override/`${VAR}` resolution, API key generation and hashing, Zod schema validation, message delivery and buffer capping.
 
 ---
 

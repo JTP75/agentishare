@@ -12,9 +12,6 @@ export class Keys {
   static readonly HOST = 'host';
   static readonly PORT = 'port';
   static readonly CORS_ORIGINS = 'cors_origins';
-  // auth
-  static readonly TOKEN_SECRET = 'token_secret';
-  static readonly TOKEN_EXPIRY_SECONDS = 'token_expiry_seconds';
   // rate_limit
   static readonly WINDOW_MS = 'window_ms';
   static readonly MAX_REQUESTS = 'max_requests';
