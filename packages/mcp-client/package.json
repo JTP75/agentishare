@@ -1,0 +1,29 @@
+{
+  "name": "@agent-hub/mcp-client",
+  "version": "0.1.0",
+  "description": "Local stdio MCP proxy to Agent Hub — enables AI agents to share context in real time",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "agent-hub": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json && chmod +x dist/index.js",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run --passWithNoTests",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "eventsource": "^2.0.2",
+    "undici": "^6.0.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/eventsource": "^1.1.15",
+    "@types/node": "^20.11.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3",
+    "vitest": "^2.1.0"
+  }
+}

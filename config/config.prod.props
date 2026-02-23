@@ -1,3 +1,7 @@
 [database]
 
 [server]
+port=8080
+
+[auth]
+token_secret=${TOKEN_SECRET}

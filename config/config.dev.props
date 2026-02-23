@@ -1,3 +1,6 @@
 [database]
 
 [server]
+
+[rate_limit]
+max_requests=1000
