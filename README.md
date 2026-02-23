@@ -57,7 +57,9 @@ No credentials required at startup. Add the client, then run a setup tool from w
 ```bash
 # Claude Code (options must come before the server name)
 claude mcp add agent-hub --scope user -- node /path/to/mcp-client/dist/index.js
+```
 
+```json
 # Or manually in your MCP config
 {
   "mcpServers": {
