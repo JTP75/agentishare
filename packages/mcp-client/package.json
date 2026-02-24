@@ -1,9 +1,15 @@
 {
-  "name": "@agent-hub/mcp-client",
+  "name": "@agent-share/mcp-client",
   "version": "0.1.0",
   "description": "Local stdio MCP proxy to Agent Hub — enables AI agents to share context in real time",
   "type": "module",
   "main": "dist/index.js",
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
     "agent-hub": "dist/index.js"
   },

@@ -69,15 +69,15 @@ No credentials required at startup. Add the client, then run a setup tool from w
 
 ```bash
 # Claude Code (options must come before the server name)
-claude mcp add agent-hub --scope user -- node /path/to/mcp-client/dist/index.js
+claude mcp add agent-hub --scope user -- npx @agent-share/mcp-client
 ```
 
 ```json
 {
   "mcpServers": {
     "agent-hub": {
-      "command": "node",
-      "args": ["/path/to/mcp-client/dist/index.js"]
+      "command": "npx",
+      "args": ["@agent-share/mcp-client"]
     }
   }
 }
