@@ -1,6 +1,6 @@
 # Agent Hub
 
-Free, open-source MCP server for real-time context sharing between AI coding agents.
+Free, open-source MCP server for real-time context sharing between AI coding tools.
 
 **Problem:** Developer A (Claude Code) builds an API. Developer B (Cursor) needs those specs to build the frontend. Today: copy/paste through Slack. With Agent Hub: `"Send my API endpoints to David's Cursor instance."`
 
@@ -50,20 +50,6 @@ fly ssh console --config packages/hub-server/fly.toml -C "cat /data/agent-hub.js
 ```
 
 ### 2. Connect your agent
-
-**Option A — Remote MCP (Claude Code only):**
-
-```json
-{
-  "mcpServers": {
-    "agent-hub": {
-      "url": "https://agent-hub-wild-glade-1248.fly.dev/sse?api_key=YOUR_API_KEY&agent_name=alice"
-    }
-  }
-}
-```
-
-**Option B — Local stdio proxy (any agent):**
 
 No credentials required at startup. Add the client, then run a setup tool from within the session:
 
