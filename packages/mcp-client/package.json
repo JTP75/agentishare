@@ -17,12 +17,16 @@
     "build": "tsc --project tsconfig.json && chmod +x dist/index.js",
     "dev": "tsx src/index.ts",
     "test": "vitest run --passWithNoTests",
+    "test:integration": "tsx src/nostr-integration.ts",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
+    "@types/ws": "^8.18.1",
     "eventsource": "^2.0.2",
+    "nostr-tools": "^2.23.1",
     "undici": "^6.0.0",
+    "ws": "^8.19.0",
     "zod": "^3.22.4"
   },
   "devDependencies": {
