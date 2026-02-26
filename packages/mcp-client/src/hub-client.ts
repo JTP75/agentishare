@@ -105,4 +105,8 @@ export class HubClient implements ITransport {
   close(): void {
     this.es?.close();
   }
+
+  exportConfig(): Record<string, string> {
+    return { apiKey: this.opts.apiKey, agentName: this.opts.agentName, hubUrl: this.opts.hubUrl };
+  }
 }

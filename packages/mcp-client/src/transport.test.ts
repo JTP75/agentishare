@@ -66,8 +66,20 @@ describe('HubClient.flushMessages()', () => {
 
   it('returns empty array on second call (buffer cleared)', () => {
     const client = new HubClient({ hubUrl: 'http://localhost:3000', apiKey: 'key', agentName: 'agent' });
-    // Buffer is empty by default; flushing twice should both be empty
     expect(client.flushMessages()).toEqual([]);
     expect(client.flushMessages()).toEqual([]);
+  });
+});
+
+describe('HubClient.exportConfig()', () => {
+  it('returns apiKey, agentName, hubUrl', () => {
+    const client = new HubClient({ hubUrl: 'http://hub.example.com', apiKey: 'mykey', agentName: 'alice' });
+    expect(client.exportConfig()).toEqual({ apiKey: 'mykey', agentName: 'alice', hubUrl: 'http://hub.example.com' });
+  });
+
+  it('reflects updated config after configure()', () => {
+    const client = new HubClient({ hubUrl: 'http://old', apiKey: 'old', agentName: 'old' });
+    client.configure({ hubUrl: 'http://new', apiKey: 'new', agentName: 'new' });
+    expect(client.exportConfig()).toEqual({ apiKey: 'new', agentName: 'new', hubUrl: 'http://new' });
   });
 });

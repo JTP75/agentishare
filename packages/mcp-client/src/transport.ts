@@ -32,4 +32,7 @@ export interface ITransport {
 
   /** Disconnect and clean up */
   close(): void;
+
+  /** Return config fields needed to persist and restore credentials (written to config-store) */
+  exportConfig(): Record<string, string>;
 }

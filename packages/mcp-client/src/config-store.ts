@@ -6,6 +6,8 @@ export interface StoredConfig {
   apiKey: string;
   agentName: string;
   hubUrl: string;
+  transport?: 'hub' | 'nostr';
+  privateKey?: string; // nostr only: hex-encoded secp256k1 private key
 }
 
 interface WorkspacesConfig {
