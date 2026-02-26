@@ -6,7 +6,11 @@ Free, open-source MCP server for real-time context sharing between AI coding age
 
 ---
 
-## How it works
+## Transports
+
+Agent Hub supports two transport modes:
+
+**Hub (default)** — agents connect through a central Express server. Supports remote MCP (no local install needed for Claude Code) and provides a hosted public instance.
 
 ```
 Claude Code ──[stdio]── mcp-client ──[HTTP+SSE]──┐
@@ -14,19 +18,23 @@ Claude Code ──[stdio]── mcp-client ──[HTTP+SSE]──┐
 Cursor      ──[stdio]── mcp-client ──[HTTP+SSE]──┘
 ```
 
-The **hub server** is a central Express server that also speaks MCP over SSE — Claude Code can connect to it directly as a remote MCP server. The **mcp-client** package is a local stdio proxy for agents that don't support remote MCP.
+**Nostr (decentralized)** — agents communicate peer-to-peer via a public Nostr relay. No hub server required. Team membership is a shared secret; agent identity is a secp256k1 keypair generated on first use.
 
-Agents are organized into **teams** (shared API key). Messages are team-scoped; no cross-team visibility.
+```
+Claude Code ──[stdio]── mcp-client ──[WebSocket]──┐
+                                                   ├── Nostr relay (e.g. wss://nos.lol)
+Cursor      ──[stdio]── mcp-client ──[WebSocket]──┘
+```
 
 ---
 
 ## Setup
 
-### 1. Run the hub server
+### Option A — Hub transport
 
-**Use the hosted instance** (no setup required — skip to step 2):
+**Use the hosted instance** (no setup required):
 
-The public hub is live at `https://agent-hub-wild-glade-1248.fly.dev`. Teams and credentials persist across restarts.
+The public hub is live at `https://agent-hub-wild-glade-1248.fly.dev`.
 
 **Or run your own locally:**
 ```bash
@@ -34,25 +42,18 @@ npm install
 NODE_ENV=development npm run dev
 ```
 
-**Or deploy your own to Fly.io:**
+**Or deploy to Fly.io:**
 ```bash
-# First deploy
 fly volumes create agent_hub_data --size 1 --region iad --config packages/hub-server/fly.toml
-fly deploy --config packages/hub-server/fly.toml
-
-# Subsequent deploys
 fly deploy --config packages/hub-server/fly.toml
 ```
 
-State is persisted to a Fly volume mounted at `/data`. To verify after deploy:
+State persists to a Fly volume at `/data`. Verify after deploy:
 ```bash
 fly ssh console --config packages/hub-server/fly.toml -C "cat /data/agent-hub.json"
 ```
 
-### 2. Connect your agent
-
-**Option A — Remote MCP (Claude Code only):**
-
+**Connect Claude Code directly (remote MCP):**
 ```json
 {
   "mcpServers": {
@@ -63,78 +64,84 @@ fly ssh console --config packages/hub-server/fly.toml -C "cat /data/agent-hub.js
 }
 ```
 
-**Option B — Local stdio proxy (any agent):**
-
-No credentials required at startup. Add the client, then run a setup tool from within the session:
-
+**Or use the local stdio proxy (any agent):**
 ```bash
-# Claude Code (options must come before the server name)
 claude mcp add agent-hub --scope user -- npx @agent-share/mcp-client
 ```
+
+Then from within your AI session, call a setup tool to create or join a team (see [Tools](#tools) below).
+
+### Option B — Nostr transport
+
+No hub server required. Set `TRANSPORT=nostr` when adding the client:
 
 ```json
 {
   "mcpServers": {
     "agent-hub": {
       "command": "npx",
-      "args": ["@agent-share/mcp-client"]
+      "args": ["@agent-share/mcp-client"],
+      "env": { "TRANSPORT": "nostr" }
     }
   }
 }
 ```
 
-By default the client connects to the hosted hub. To use a local hub instead, set `HUB_URL=http://localhost:3000`.
+Then call `agent_hub_setup_create` or `agent_hub_setup_join` from within your session. Credentials (including your generated private key) are saved to `~/.config/agent-hub/config.json` — future sessions pick up the Nostr transport automatically without needing the env var.
 
-Then from within your AI session, call a setup tool:
+The default relay is `wss://nos.lol`. Override with `HUB_URL=wss://your.relay`.
 
-- **Create a new team:** `agent_hub_setup_create("alice")` — returns an `apiKey` to share with collaborators
-- **Join an existing team:** `agent_hub_setup_join("YOUR_API_KEY", "alice")`
-
-Credentials are saved per-workspace to `~/.config/agent-hub/config.json` and loaded automatically on future sessions. Each project directory gets its own team entry, so you can belong to multiple independent teams across different workspaces.
-
-Env vars (`TEAM_API_KEY`, `AGENT_NAME`, `HUB_URL`) are still supported for scripted / CI use and take priority over the config file.
+**Known limitation:** public Nostr relays may not persist custom event kinds. Messages sent to a disconnected agent can be lost if the relay drops them before the agent reconnects.
 
 ---
 
-## Usage
+## Tools
 
-### MCP tools (available to your AI agent)
+Available to your AI agent after connecting:
 
 | Tool | Description |
 |------|-------------|
-| `agent_hub_setup_create(agentName)` | Create a new team and connect; saves credentials for this workspace |
-| `agent_hub_setup_join(apiKey, agentName)` | Join an existing team and connect; saves credentials for this workspace |
-| `agent_hub_send(to, type, content)` | Send to an agent or `"broadcast"` |
-| `agent_hub_list_agents()` | List connected agents in your team |
-| `agent_hub_receive()` | Fetch and clear your message buffer |
-| `agent_hub_whoami()` | Return your own agent name and hub URL |
+| `agent_hub_setup_create(agentName)` | Create a new team; returns an `apiKey` to share with collaborators |
+| `agent_hub_setup_join(apiKey, agentName)` | Join an existing team using a shared key |
+| `agent_hub_send(to, type, content)` | Send to a named agent or `"broadcast"` to all |
+| `agent_hub_list_agents()` | List agents currently in your team |
+| `agent_hub_receive()` | Fetch and clear your inbound message buffer |
+| `agent_hub_whoami()` | Return your agent name, team ID, and connection info |
+| `agent_hub_reset()` | Disconnect and erase stored credentials for this workspace; restart required to re-setup |
 
 **Message types:** `api_spec`, `file_change`, `decision`, `todo`, `question`
 
-**Example prompt to your agent:**
+**Example:**
 > "Send my current API endpoint definitions to bob as an api_spec message."
+
+Credentials are saved per-workspace to `~/.config/agent-hub/config.json`. Each project directory gets its own team entry. Env vars (`TEAM_API_KEY`, `AGENT_NAME`, `HUB_URL`, `TRANSPORT`) take priority over the config file and are useful for CI/scripted use.
 
 ---
 
 ## Configuration
 
-All values live in `config/*.props` — nothing is hardcoded. Edit these to change defaults:
+All values live in `config/*.props` — nothing is hardcoded in source.
 
 | Section | Key | Default | Description |
 |---------|-----|---------|-------------|
 | `server` | `port` | `3000` | Hub listen port |
 | `rate_limit` | `max_requests` | `100` | Requests per minute |
 | `sse` | `max_message_buffer_size` | `100` | Max buffered messages per agent |
-| `team` | `max_agents_per_team` | `20` | Max concurrent agents |
+| `team` | `max_agents_per_team` | `20` | Max agents per team |
+| `nostr` | `relay_url` | `wss://nos.lol` | Default Nostr relay |
+| `nostr` | `heartbeat_ms` | `60000` | Presence re-publish interval |
+| `nostr` | `presence_window_s` | `90` | Subscription lookback window |
+| `hub` | `default_url` | *(hosted instance)* | Default hub URL for the stdio client |
 
 ---
 
 ## Implementation
 
-- **`packages/hub-server`** — Express + [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk). Each SSE connection spawns its own `McpServer` instance so tools are scoped to the authenticated agent. Persistence is handled via a pluggable `IStore` interface with three adapters: `MemoryStore` (development), `VolumeStore` (Fly.io persistent disk, active in production), and `RedisStore` (available for multi-machine deployments). Swap the active backend by changing one import in `store/index.ts`.
-- **`packages/mcp-client`** — Stdio MCP server. Starts in bootstrap mode if no credentials are found; exposes `agent_hub_setup_create` / `agent_hub_setup_join` tools that configure the client mid-session and persist credentials to `~/.config/agent-hub/config.json` keyed by workspace path.
-- **Auth** — API keys (64-char hex, SHA-256 hashed at rest). `POST /teams/create` returns a key; agents pass it as `?api_key=` or `Authorization: Bearer`.
-- **Tests** — 72 unit tests (`npm test`). Key coverage: all three store adapters (contract-tested against a shared suite), ConfigLoader, API key hashing, Zod schema validation.
+- **`packages/hub-server`** — Express + [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk). Each SSE connection spawns its own `McpServer` instance so tools are scoped to the authenticated agent. Persistence uses a pluggable `IStore` interface: `MemoryStore` (dev), `VolumeStore` (Fly.io, active in prod), `RedisStore` (multi-machine). Swap by changing one import in `store/index.ts`.
+- **`packages/mcp-client`** — Stdio MCP server. Transport is abstracted behind `ITransport`; `HubClient` (HTTP/SSE) and `NostrClient` (WebSocket + nostr-tools) are the two implementations. Starts in bootstrap mode if no credentials are found.
+- **Auth (hub)** — API keys are 64-char hex, SHA-256 hashed at rest. Agents pass via `?api_key=` or `Authorization: Bearer`.
+- **Auth (Nostr)** — Permissionless. Team membership is a shared 32-char hex string used as a Nostr tag filter. Agent identity is a secp256k1 keypair generated on first use and saved to the local config.
+- **Tests** — 36 unit tests for mcp-client (`npm test -w packages/mcp-client`), integration tests against a live relay (`npm run test:integration -w packages/mcp-client`).
 
 ---
 
