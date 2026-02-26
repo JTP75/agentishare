@@ -4,7 +4,9 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import type { ITransport } from './transport.js';
 import { HubClient } from './hub-client.js';
+import { NostrClient, DEFAULT_RELAY_URL } from './nostr-client.js';
 import { loadConfig, saveConfig } from './config-store.js';
+import type { StoredConfig } from './config-store.js';
 
 const NOT_CONFIGURED = 'Not configured. Use agent_hub_setup_create or agent_hub_setup_join first.';
 
@@ -16,30 +18,33 @@ const DEFAULT_HUB_URL = 'https://agent-hub-wild-glade-1248.fly.dev';
 const envApiKey = process.env['TEAM_API_KEY'] ?? '';
 const envAgentName = process.env['AGENT_NAME'] ?? '';
 const envHubUrl = process.env['HUB_URL'] ?? '';
+const envTransport = process.env['TRANSPORT'] ?? '';
 
-let initialApiKey = envApiKey;
-let initialAgentName = envAgentName;
-let initialHubUrl = envHubUrl || DEFAULT_HUB_URL;
+const stored = loadConfig();
+const transportType = envTransport || stored?.transport || 'hub';
 
-if (!initialApiKey || !initialAgentName) {
-  const stored = loadConfig();
-  if (stored) {
-    initialApiKey = initialApiKey || stored.apiKey;
-    initialAgentName = initialAgentName || stored.agentName;
-    initialHubUrl = envHubUrl || stored.hubUrl || DEFAULT_HUB_URL;
-  }
+let initialApiKey = envApiKey || stored?.apiKey || '';
+let initialAgentName = envAgentName || stored?.agentName || '';
+
+let hub: ITransport;
+
+if (transportType === 'nostr') {
+  const relayUrl = envHubUrl || stored?.hubUrl || DEFAULT_RELAY_URL;
+  hub = new NostrClient({
+    relayUrl,
+    agentName: initialAgentName,
+    teamId: initialApiKey || undefined,
+    privateKey: stored?.privateKey,
+  });
+} else {
+  const hubUrl = envHubUrl || stored?.hubUrl || DEFAULT_HUB_URL;
+  hub = new HubClient({ hubUrl, apiKey: initialApiKey, agentName: initialAgentName });
 }
-
-const hub: ITransport = new HubClient({
-  hubUrl: initialHubUrl,
-  apiKey: initialApiKey,
-  agentName: initialAgentName,
-});
 
 async function main(): Promise<void> {
   if (hub.isConfigured()) {
     hub.connect();
-    process.stderr.write(`[agent-hub] Connected as "${initialAgentName}"\n`);
+    process.stderr.write(`[agent-hub] Connected as "${initialAgentName}" (transport: ${transportType})\n`);
   } else {
     process.stderr.write('[agent-hub] Starting in bootstrap mode — call agent_hub_setup_create or agent_hub_setup_join\n');
   }
@@ -48,26 +53,34 @@ async function main(): Promise<void> {
 
   server.tool(
     'agent_hub_setup_create',
-    'Create a new team on the hub, store credentials locally, and connect. Returns { teamId, apiKey, agentName } — share the apiKey with collaborators.',
+    'Create a new team on the hub, store credentials locally, and connect. Returns { teamId, apiKey, agentName } — share the apiKey with collaborators. IMPORTANT: before calling this tool, ask the user what agent name they want to use. Do not invent a name.',
     {
-      agentName: z.string().describe('Your agent name (required)'),
+      agentName: z.string().describe('The agent name chosen by the user — you must ask the user for this before calling the tool'),
     },
     async ({ agentName }) => {
       if (hub.isConfigured()) {
-        const stored = loadConfig();
-        return { content: [{ type: 'text' as const, text: JSON.stringify({ alreadyConfigured: true, agentName, teamId: stored?.apiKey ? '(see config file)' : undefined }) }] };
+        return { content: [{ type: 'text' as const, text: JSON.stringify({ alreadyConfigured: true, agentName }) }] };
       }
 
-      const hubUrl = envHubUrl || DEFAULT_HUB_URL;
       try {
-        hub.configure({ hubUrl, apiKey: '', agentName });
-        const { teamId, apiKey } = await hub.createTeam();
-        const cfg = { apiKey, agentName, hubUrl };
-        saveConfig(cfg);
-        hub.configure(cfg);
-        hub.connect();
-        process.stderr.write(`[agent-hub] Connected as "${agentName}"\n`);
-        return { content: [{ type: 'text' as const, text: JSON.stringify({ teamId, apiKey, agentName }) }] };
+        if (transportType === 'nostr') {
+          const relayUrl = envHubUrl || stored?.hubUrl || DEFAULT_RELAY_URL;
+          hub.configure({ relayUrl, agentName });
+          const { teamId, apiKey } = await hub.createTeam();
+          saveConfig(hub.exportConfig() as unknown as StoredConfig);
+          hub.connect();
+          process.stderr.write(`[agent-hub] Connected as "${agentName}" (nostr)\n`);
+          return { content: [{ type: 'text' as const, text: JSON.stringify({ teamId, apiKey, agentName }) }] };
+        } else {
+          const hubUrl = envHubUrl || stored?.hubUrl || DEFAULT_HUB_URL;
+          hub.configure({ hubUrl, apiKey: '', agentName });
+          const { teamId, apiKey } = await hub.createTeam();
+          hub.configure({ hubUrl, apiKey, agentName });
+          saveConfig(hub.exportConfig() as unknown as StoredConfig);
+          hub.connect();
+          process.stderr.write(`[agent-hub] Connected as "${agentName}"\n`);
+          return { content: [{ type: 'text' as const, text: JSON.stringify({ teamId, apiKey, agentName }) }] };
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         return { content: [{ type: 'text' as const, text: `Error: ${msg}` }] };
@@ -77,32 +90,44 @@ async function main(): Promise<void> {
 
   server.tool(
     'agent_hub_setup_join',
-    'Join an existing team using an API key, store credentials locally, and connect.',
+    'Join an existing team using an API key, store credentials locally, and connect. IMPORTANT: before calling this tool, ask the user what agent name they want to use. Do not invent a name.',
     {
       apiKey: z.string().describe('Team API key to join'),
-      agentName: z.string().describe('Your agent name (required)'),
+      agentName: z.string().describe('The agent name chosen by the user — you must ask the user for this before calling the tool'),
     },
     async ({ apiKey, agentName }) => {
       if (hub.isConfigured()) {
         return { content: [{ type: 'text' as const, text: JSON.stringify({ alreadyConfigured: true, agentName }) }] };
       }
 
-      const hubUrl = envHubUrl || DEFAULT_HUB_URL;
-      // Verify key by attempting to list agents
-      hub.configure({ hubUrl, apiKey, agentName });
       try {
-        await hub.listAgents();
+        if (transportType === 'nostr') {
+          // Nostr is permissionless — the teamId IS the apiKey, no server to verify against
+          const relayUrl = envHubUrl || stored?.hubUrl || DEFAULT_RELAY_URL;
+          hub.configure({ relayUrl, agentName, teamId: apiKey, privateKey: stored?.privateKey });
+          saveConfig(hub.exportConfig() as unknown as StoredConfig);
+          hub.connect();
+          process.stderr.write(`[agent-hub] Connected as "${agentName}" (nostr)\n`);
+          return { content: [{ type: 'text' as const, text: JSON.stringify({ agentName, relayUrl }) }] };
+        } else {
+          const hubUrl = envHubUrl || stored?.hubUrl || DEFAULT_HUB_URL;
+          // Verify key by attempting to list agents
+          hub.configure({ hubUrl, apiKey, agentName });
+          try {
+            await hub.listAgents();
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            return { content: [{ type: 'text' as const, text: `Invalid API key or connection error: ${msg}` }] };
+          }
+          saveConfig(hub.exportConfig() as unknown as StoredConfig);
+          hub.connect();
+          process.stderr.write(`[agent-hub] Connected as "${agentName}"\n`);
+          return { content: [{ type: 'text' as const, text: JSON.stringify({ agentName, hubUrl }) }] };
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        return { content: [{ type: 'text' as const, text: `Invalid API key or connection error: ${msg}` }] };
+        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }] };
       }
-
-      const cfg = { apiKey, agentName, hubUrl };
-      saveConfig(cfg);
-      hub.configure(cfg);
-      hub.connect();
-      process.stderr.write(`[agent-hub] Connected as "${agentName}"\n`);
-      return { content: [{ type: 'text' as const, text: JSON.stringify({ agentName, hubUrl }) }] };
     }
   );
 
