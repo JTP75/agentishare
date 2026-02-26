@@ -10,6 +10,11 @@ const PRESENCE_KIND = 1338;
 
 const DEFAULT_RELAY_URL = 'wss://nos.lol';
 
+// Heartbeat: re-publish presence every 60s so late joiners can discover us.
+// Subscription window is 1.5× the interval so there is always overlap.
+const HEARTBEAT_MS = 60_000;
+const PRESENCE_WINDOW_S = 90;
+
 export interface NostrClientOptions extends ITransportOptions {
   agentName: string;
   relayUrl: string;
@@ -30,6 +35,7 @@ interface NostrEvent {
 export class NostrClient implements ITransport {
   private opts: NostrClientOptions;
   private ws?: WebSocket;
+  private heartbeat?: ReturnType<typeof setInterval>;
   private messageBuffer: AgentMessage[] = [];
   private knownAgents = new Map<string, AgentInfo>();
   private pendingPublish = new Map<string, { resolve: () => void; reject: (e: Error) => void }>();
@@ -72,12 +78,14 @@ export class NostrClient implements ITransport {
 
   connect(): void {
     if (!this.opts.teamId) return;
+    clearInterval(this.heartbeat);
     this.ws?.close();
     this.ws = new WebSocket(this.opts.relayUrl);
 
     this.ws.on('open', () => {
       this.subscribe();
       this.publishPresence();
+      this.heartbeat = setInterval(() => this.publishPresence(), HEARTBEAT_MS);
     });
 
     this.ws.on('message', (data: Buffer) => {
@@ -136,6 +144,7 @@ export class NostrClient implements ITransport {
   }
 
   close(): void {
+    clearInterval(this.heartbeat);
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(['CLOSE', this.subId]));
       this.ws.close();
@@ -168,7 +177,7 @@ export class NostrClient implements ITransport {
     const filter = {
       kinds: [AGENT_MSG_KIND, PRESENCE_KIND],
       '#t': [this.opts.teamId!],
-      since: Math.floor(Date.now() / 1000) - 60, // catch up on last minute
+      since: Math.floor(Date.now() / 1000) - PRESENCE_WINDOW_S,
     };
     this.ws!.send(JSON.stringify(['REQ', this.subId, filter]));
   }
