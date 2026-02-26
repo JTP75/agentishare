@@ -1,14 +1,15 @@
 import EventSource from 'eventsource';
 import { fetch } from 'undici';
 import type { AgentMessage, AgentInfo } from './types.js';
+import type { ITransport, ITransportOptions } from './transport.js';
 
-export interface HubClientOptions {
+export interface HubClientOptions extends ITransportOptions {
   hubUrl: string;
   apiKey: string;
   agentName: string;
 }
 
-export class HubClient {
+export class HubClient implements ITransport {
   private es?: EventSource;
   private messageBuffer: AgentMessage[] = [];
   private opts: HubClientOptions;
@@ -21,16 +22,16 @@ export class HubClient {
     return !!(this.opts.apiKey && this.opts.agentName);
   }
 
-  configure(opts: HubClientOptions): void {
-    this.opts = opts;
+  configure(opts: ITransportOptions): void {
+    this.opts = opts as HubClientOptions;
   }
 
   identity(): { agentName: string; hubUrl: string } {
     return { agentName: this.opts.agentName, hubUrl: this.opts.hubUrl };
   }
 
-  async createTeam(hubUrl: string): Promise<{ teamId: string; apiKey: string }> {
-    const res = await fetch(`${hubUrl}/teams/create`, { method: 'POST' });
+  async createTeam(): Promise<{ teamId: string; apiKey: string }> {
+    const res = await fetch(`${this.opts.hubUrl}/teams/create`, { method: 'POST' });
     if (!res.ok) {
       const body = await res.json() as { error: string };
       throw new Error(`Create team failed: ${body.error}`);
@@ -38,7 +39,7 @@ export class HubClient {
     return res.json() as Promise<{ teamId: string; apiKey: string }>;
   }
 
-  connectSSE(): void {
+  connect(): void {
     this.es?.close();
     const { hubUrl, apiKey, agentName } = this.opts;
     const url = `${hubUrl}/agent/stream?api_key=${encodeURIComponent(apiKey)}&agent_name=${encodeURIComponent(agentName)}`;

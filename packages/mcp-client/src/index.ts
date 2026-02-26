@@ -2,6 +2,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
+import type { ITransport } from './transport.js';
 import { HubClient } from './hub-client.js';
 import { loadConfig, saveConfig } from './config-store.js';
 
@@ -29,7 +30,7 @@ if (!initialApiKey || !initialAgentName) {
   }
 }
 
-const hub = new HubClient({
+const hub: ITransport = new HubClient({
   hubUrl: initialHubUrl,
   apiKey: initialApiKey,
   agentName: initialAgentName,
@@ -37,7 +38,7 @@ const hub = new HubClient({
 
 async function main(): Promise<void> {
   if (hub.isConfigured()) {
-    hub.connectSSE();
+    hub.connect();
     process.stderr.write(`[agent-hub] Connected as "${initialAgentName}"\n`);
   } else {
     process.stderr.write('[agent-hub] Starting in bootstrap mode — call agent_hub_setup_create or agent_hub_setup_join\n');
@@ -59,11 +60,12 @@ async function main(): Promise<void> {
 
       const hubUrl = envHubUrl || DEFAULT_HUB_URL;
       try {
-        const { teamId, apiKey } = await hub.createTeam(hubUrl);
+        hub.configure({ hubUrl, apiKey: '', agentName });
+        const { teamId, apiKey } = await hub.createTeam();
         const cfg = { apiKey, agentName, hubUrl };
         saveConfig(cfg);
         hub.configure(cfg);
-        hub.connectSSE();
+        hub.connect();
         process.stderr.write(`[agent-hub] Connected as "${agentName}"\n`);
         return { content: [{ type: 'text' as const, text: JSON.stringify({ teamId, apiKey, agentName }) }] };
       } catch (err) {
@@ -87,9 +89,9 @@ async function main(): Promise<void> {
 
       const hubUrl = envHubUrl || DEFAULT_HUB_URL;
       // Verify key by attempting to list agents
-      const testHub = new HubClient({ hubUrl, apiKey, agentName });
+      hub.configure({ hubUrl, apiKey, agentName });
       try {
-        await testHub.listAgents();
+        await hub.listAgents();
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         return { content: [{ type: 'text' as const, text: `Invalid API key or connection error: ${msg}` }] };
@@ -98,7 +100,7 @@ async function main(): Promise<void> {
       const cfg = { apiKey, agentName, hubUrl };
       saveConfig(cfg);
       hub.configure(cfg);
-      hub.connectSSE();
+      hub.connect();
       process.stderr.write(`[agent-hub] Connected as "${agentName}"\n`);
       return { content: [{ type: 'text' as const, text: JSON.stringify({ agentName, hubUrl }) }] };
     }
