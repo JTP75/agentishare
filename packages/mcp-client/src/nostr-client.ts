@@ -8,18 +8,13 @@ import type { AgentMessage, AgentInfo, MessageType } from './types.js';
 const AGENT_MSG_KIND = 1337;
 const PRESENCE_KIND = 1338;
 
-const DEFAULT_RELAY_URL = 'wss://nos.lol';
-
-// Heartbeat: re-publish presence every 60s so late joiners can discover us.
-// Subscription window is 1.5× the interval so there is always overlap.
-const HEARTBEAT_MS = 60_000;
-const PRESENCE_WINDOW_S = 90;
-
 export interface NostrClientOptions extends ITransportOptions {
   agentName: string;
   relayUrl: string;
-  teamId?: string;     // shared group identifier; undefined until createTeam/join
-  privateKey?: string; // hex-encoded secp256k1 private key; generated on first use
+  teamId?: string;          // shared group identifier; undefined until createTeam/join
+  privateKey?: string;      // hex-encoded secp256k1 private key; generated on first use
+  heartbeatMs?: number;     // how often to re-publish presence (default from config)
+  presenceWindowS?: number; // subscription lookback window (default from config)
 }
 
 interface NostrEvent {
@@ -57,6 +52,8 @@ export class NostrClient implements ITransport {
       relayUrl: String(o['relayUrl'] ?? o['hubUrl'] ?? this.opts.relayUrl),
       teamId: o['teamId'] != null ? String(o['teamId']) : o['apiKey'] != null ? String(o['apiKey']) : undefined,
       privateKey: o['privateKey'] != null ? String(o['privateKey']) : this.opts.privateKey,
+      heartbeatMs: this.opts.heartbeatMs,
+      presenceWindowS: this.opts.presenceWindowS,
     };
   }
 
@@ -85,7 +82,7 @@ export class NostrClient implements ITransport {
     this.ws.on('open', () => {
       this.subscribe();
       this.publishPresence();
-      this.heartbeat = setInterval(() => this.publishPresence(), HEARTBEAT_MS);
+      this.heartbeat = setInterval(() => this.publishPresence(), this.opts.heartbeatMs!);
     });
 
     this.ws.on('message', (data: Buffer) => {
@@ -177,7 +174,7 @@ export class NostrClient implements ITransport {
     const filter = {
       kinds: [AGENT_MSG_KIND, PRESENCE_KIND],
       '#t': [this.opts.teamId!],
-      since: Math.floor(Date.now() / 1000) - PRESENCE_WINDOW_S,
+      since: Math.floor(Date.now() / 1000) - this.opts.presenceWindowS!,
     };
     this.ws!.send(JSON.stringify(['REQ', this.subId, filter]));
   }
@@ -270,4 +267,3 @@ export class NostrClient implements ITransport {
   }
 }
 
-export { DEFAULT_RELAY_URL };

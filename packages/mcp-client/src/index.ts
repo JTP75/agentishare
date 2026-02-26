@@ -4,26 +4,32 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import type { ITransport } from './transport.js';
 import { HubClient } from './hub-client.js';
-import { NostrClient, DEFAULT_RELAY_URL } from './nostr-client.js';
+import { NostrClient } from './nostr-client.js';
 import { loadConfig, saveConfig } from './config-store.js';
 import type { StoredConfig } from './config-store.js';
+import { getConfig } from './config.js';
 
 const NOT_CONFIGURED = 'Not configured. Use agent_hub_setup_create or agent_hub_setup_join first.';
 
-const DEFAULT_HUB_URL = 'https://agent-hub-wild-glade-1248.fly.dev';
+// Defaults sourced from config/config.props (falls back to literals when config not present,
+// e.g. when installed globally via npm).
+const DEFAULT_HUB_URL  = getConfig('hub',   'default_url',       'https://agent-hub-wild-glade-1248.fly.dev');
+const DEFAULT_RELAY_URL = getConfig('nostr', 'relay_url',         'wss://nos.lol');
+const DEFAULT_HEARTBEAT_MS     = getConfig<number>('nostr', 'heartbeat_ms',     60_000);
+const DEFAULT_PRESENCE_WINDOW_S = getConfig<number>('nostr', 'presence_window_s', 90);
 
 // Priority 1: env vars
 // Priority 2: config file
 // Priority 3: bootstrap mode
-const envApiKey = process.env['TEAM_API_KEY'] ?? '';
-const envAgentName = process.env['AGENT_NAME'] ?? '';
-const envHubUrl = process.env['HUB_URL'] ?? '';
-const envTransport = process.env['TRANSPORT'] ?? '';
+const envApiKey    = process.env['TEAM_API_KEY'] ?? '';
+const envAgentName = process.env['AGENT_NAME']   ?? '';
+const envHubUrl    = process.env['HUB_URL']      ?? '';
+const envTransport = process.env['TRANSPORT']    ?? '';
 
 const stored = loadConfig();
 const transportType = envTransport || stored?.transport || 'hub';
 
-let initialApiKey = envApiKey || stored?.apiKey || '';
+let initialApiKey   = envApiKey    || stored?.apiKey    || '';
 let initialAgentName = envAgentName || stored?.agentName || '';
 
 let hub: ITransport;
@@ -35,6 +41,8 @@ if (transportType === 'nostr') {
     agentName: initialAgentName,
     teamId: initialApiKey || undefined,
     privateKey: stored?.privateKey,
+    heartbeatMs: DEFAULT_HEARTBEAT_MS,
+    presenceWindowS: DEFAULT_PRESENCE_WINDOW_S,
   });
 } else {
   const hubUrl = envHubUrl || stored?.hubUrl || DEFAULT_HUB_URL;

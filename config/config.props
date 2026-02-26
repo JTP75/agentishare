@@ -17,3 +17,11 @@ max_message_buffer_size=100
 
 [team]
 max_agents_per_team=20
+
+[nostr]
+relay_url=wss://nos.lol
+heartbeat_ms=60000
+presence_window_s=90
+
+[hub]
+default_url=https://agent-hub-wild-glade-1248.fly.dev

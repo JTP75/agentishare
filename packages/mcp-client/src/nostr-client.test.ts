@@ -13,13 +13,10 @@ vi.mock('ws', () => {
   return { default: MockWebSocket, WebSocket: MockWebSocket };
 });
 
-const { NostrClient, DEFAULT_RELAY_URL } = await import('./nostr-client.js');
+const { NostrClient } = await import('./nostr-client.js');
 
-describe('DEFAULT_RELAY_URL', () => {
-  it('is a wss:// URL', () => {
-    expect(DEFAULT_RELAY_URL).toMatch(/^wss:\/\//);
-  });
-});
+// Relay URL used throughout tests — mirrors the default in config/config.props
+const DEFAULT_RELAY_URL = 'wss://nos.lol';
 
 describe('NostrClient satisfies ITransport', () => {
   it('is structurally compatible with ITransport', () => {
