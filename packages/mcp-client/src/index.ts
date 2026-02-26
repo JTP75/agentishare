@@ -27,7 +27,7 @@ const envHubUrl    = process.env['HUB_URL']      ?? '';
 const envTransport = process.env['TRANSPORT']    ?? '';
 
 const stored = loadConfig();
-const transportType = envTransport || stored?.transport || 'hub';
+const transportType = envTransport || stored?.transport || 'nostr';
 
 let initialApiKey   = envApiKey    || stored?.apiKey    || '';
 let initialAgentName = envAgentName || stored?.agentName || '';

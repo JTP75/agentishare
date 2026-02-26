@@ -10,15 +10,7 @@ Free, open-source MCP server for real-time context sharing between AI coding age
 
 Agent Hub supports two transport modes:
 
-**Hub (default)** — agents connect through a central Express server. Supports remote MCP (no local install needed for Claude Code) and provides a hosted public instance.
-
-```
-Claude Code ──[stdio]── mcp-client ──[HTTP+SSE]──┐
-                                                  ├── hub-server
-Cursor      ──[stdio]── mcp-client ──[HTTP+SSE]──┘
-```
-
-**Nostr (decentralized)** — agents communicate peer-to-peer via a public Nostr relay. No hub server required. Team membership is a shared secret; agent identity is a secp256k1 keypair generated on first use.
+**Nostr (default)** — agents communicate peer-to-peer via a public Nostr relay. No hub server required. Team membership is a shared secret; agent identity is a secp256k1 keypair generated on first use.
 
 ```
 Claude Code ──[stdio]── mcp-client ──[WebSocket]──┐
@@ -26,11 +18,33 @@ Claude Code ──[stdio]── mcp-client ──[WebSocket]──┐
 Cursor      ──[stdio]── mcp-client ──[WebSocket]──┘
 ```
 
+**Hub** — agents connect through a central Express server. Supports remote MCP (no local install needed for Claude Code) and provides a hosted public instance.
+
+```
+Claude Code ──[stdio]── mcp-client ──[HTTP+SSE]──┐
+                                                  ├── hub-server
+Cursor      ──[stdio]── mcp-client ──[HTTP+SSE]──┘
+```
+
 ---
 
 ## Setup
 
-### Option A — Hub transport
+### Option A — Nostr transport (default)
+
+No hub server required. Add the client and call a setup tool:
+
+```bash
+claude mcp add agent-hub --scope user -- npx @agent-share/mcp-client
+```
+
+Then from within your AI session, call `agent_hub_setup_create` or `agent_hub_setup_join`. Your generated private key and team ID are saved to `~/.config/agent-hub/config.json` — future sessions connect automatically.
+
+The default relay is `wss://nos.lol`. Override with `HUB_URL=wss://your.relay`.
+
+**Known limitation:** public Nostr relays may not persist custom event kinds. Messages sent to a disconnected agent can be lost if the relay drops them before the agent reconnects.
+
+### Option B — Hub transport
 
 **Use the hosted instance** (no setup required):
 
@@ -71,27 +85,7 @@ claude mcp add agent-hub --scope user -- npx @agent-share/mcp-client
 
 Then from within your AI session, call a setup tool to create or join a team (see [Tools](#tools) below).
 
-### Option B — Nostr transport
-
-No hub server required. Set `TRANSPORT=nostr` when adding the client:
-
-```json
-{
-  "mcpServers": {
-    "agent-hub": {
-      "command": "npx",
-      "args": ["@agent-share/mcp-client"],
-      "env": { "TRANSPORT": "nostr" }
-    }
-  }
-}
-```
-
-Then call `agent_hub_setup_create` or `agent_hub_setup_join` from within your session. Credentials (including your generated private key) are saved to `~/.config/agent-hub/config.json` — future sessions pick up the Nostr transport automatically without needing the env var.
-
-The default relay is `wss://nos.lol`. Override with `HUB_URL=wss://your.relay`.
-
-**Known limitation:** public Nostr relays may not persist custom event kinds. Messages sent to a disconnected agent can be lost if the relay drops them before the agent reconnects.
+To use the hub transport explicitly, set `TRANSPORT=hub` in your MCP client env or pass `HUB_URL` to point at a custom instance.
 
 ---
 
