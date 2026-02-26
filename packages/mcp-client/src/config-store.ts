@@ -39,3 +39,12 @@ export function saveConfig(cfg: StoredConfig, workspace: string = process.cwd())
   all[workspace] = cfg;
   writeFileSync(configPath(), JSON.stringify(all, null, 2), 'utf-8');
 }
+
+export function clearConfig(workspace: string = process.cwd()): void {
+  try {
+    const raw = readFileSync(configPath(), 'utf-8');
+    const all = JSON.parse(raw) as WorkspacesConfig;
+    delete all[workspace];
+    writeFileSync(configPath(), JSON.stringify(all, null, 2), 'utf-8');
+  } catch { /* nothing to clear */ }
+}

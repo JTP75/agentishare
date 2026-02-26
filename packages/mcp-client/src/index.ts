@@ -5,7 +5,7 @@ import { z } from 'zod';
 import type { ITransport } from './transport.js';
 import { HubClient } from './hub-client.js';
 import { NostrClient } from './nostr-client.js';
-import { loadConfig, saveConfig } from './config-store.js';
+import { loadConfig, saveConfig, clearConfig } from './config-store.js';
 import type { StoredConfig } from './config-store.js';
 import { getConfig } from './config.js';
 
@@ -196,6 +196,29 @@ async function main(): Promise<void> {
           text: JSON.stringify(hub.identity()),
         }],
       };
+    }
+  );
+
+  server.tool(
+    'agent_hub_reset',
+    'Disconnect from the current team and erase stored credentials for this workspace. The Nostr private key is discarded (fresh identity on next setup). Restart the MCP server after reset before calling setup_create or setup_join.',
+    {},
+    async () => {
+      const warnings: string[] = [];
+      if (envApiKey || envAgentName) {
+        warnings.push('WARNING: credentials are also present in environment variables (TEAM_API_KEY / AGENT_NAME). Those will override the config file on next restart — unset them to fully reset.');
+      }
+
+      hub.close();
+      clearConfig();
+
+      const msg = [
+        'Reset complete. Stored credentials for this workspace have been cleared.',
+        ...warnings,
+        'Restart the MCP server, then call agent_hub_setup_create or agent_hub_setup_join.',
+      ].join('\n');
+
+      return { content: [{ type: 'text' as const, text: msg }] };
     }
   );
 
